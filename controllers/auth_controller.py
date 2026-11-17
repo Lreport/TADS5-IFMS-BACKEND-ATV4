@@ -20,7 +20,13 @@ from models.user import User
 
 
 router = APIRouter(tags=["Autenticação"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="token",
+    description=(
+        "Informe o e-mail cadastrado em username e a senha em password. "
+        "O token Bearer emitido é válido por 30 minutos."
+    ),
+)
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_LIFETIME = timedelta(minutes=30)
 
@@ -114,7 +120,30 @@ def _authenticate_user(email: str, password: str, session: Session) -> User | No
     return user if password_matches else None
 
 
-@router.post("/token", summary="Autenticar o aluno")
+@router.post(
+    "/token",
+    response_model=Token,
+    summary="Autenticar o aluno",
+    description=(
+        "Autentica uma conta previamente cadastrada e emite um token JWT.\n\n"
+        "Envie o e-mail no campo de formulário `username` e a senha em `password`. "
+        "No Swagger, também é possível fazer login pelo botão **Authorize**; "
+        "os campos de cliente podem ficar vazios.\n\n"
+        "O token vale por **30 minutos**. Nas requisições às rotas de atividades, "
+        "envie o cabeçalho `Authorization: Bearer <access_token>`. "
+        "Após a expiração, faça login novamente para obter outro token."
+    ),
+    response_description="Token de acesso e tipo de autenticação Bearer.",
+    responses={
+        401: {
+            "description": "E-mail ou senha inválidos.",
+            "content": {
+                "application/json": {"example": {"detail": "E-mail ou senha inválidos."}}
+            },
+        },
+        503: {"description": "Autenticação indisponível por configuração do servidor."},
+    },
+)
 def login(
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[Session, Depends(get_session)],
@@ -131,6 +160,7 @@ def login(
 
     Raises:
         HTTPException: Retorna 401 se as credenciais forem inválidas.
+        HTTPException: Retorna 503 se a chave de assinatura não estiver configurada.
 
     Returns:
         Token: JWT assinado e tipo de autenticação Bearer.

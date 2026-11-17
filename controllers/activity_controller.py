@@ -24,8 +24,35 @@ router = APIRouter(
     prefix="/activities",
     tags=["Atividades"],
     dependencies=[Depends(require_authenticated_user)],
-    responses={401: {"description": "Autenticação Bearer obrigatória."}},
+    responses={
+        401: {
+            "description": "Token Bearer ausente, inválido ou expirado.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "sem_token": {
+                            "summary": "Requisição sem token",
+                            "value": {"detail": "Not authenticated"},
+                        },
+                        "token_invalido": {
+                            "summary": "Token inválido ou expirado",
+                            "value": {"detail": "Token inválido ou expirado."},
+                        },
+                    }
+                }
+            },
+        },
+        503: {"description": "Autenticação indisponível por configuração do servidor."},
+    },
 )
+
+
+_NOT_FOUND_RESPONSE = {
+    "description": "Nenhuma atividade foi encontrada com o ID informado.",
+    "content": {
+        "application/json": {"example": {"detail": "Atividade nao encontrada."}}
+    },
+}
 
 
 @router.post(
@@ -33,6 +60,15 @@ router = APIRouter(
     response_model=ActivityOutput,
     status_code=status.HTTP_201_CREATED,
     summary="Cadastrar uma atividade",
+    description=(
+        "Cadastra uma atividade a partir dos campos de formulário.\n\n"
+        "- `title`: obrigatório, com 1 a 100 caracteres após remover espaços nas pontas.\n"
+        "- `subject`: obrigatório, com uma das disciplinas permitidas.\n"
+        "- `description`: opcional, com até 500 caracteres.\n"
+        "- `done`: opcional; assume `false` quando omitido.\n\n"
+        "O identificador é gerado pela API. Requer autenticação Bearer."
+    ),
+    response_description="Atividade cadastrada, incluindo o identificador gerado.",
 )
 def create_activity(
     data: Annotated[ActivityInput, Form()],
@@ -54,6 +90,14 @@ def create_activity(
     "",
     response_model=list[ActivityOutput],
     summary="Listar atividades",
+    description=(
+        "Lista as atividades em ordem crescente de identificador.\n\n"
+        "Use `subject` para filtrar pela disciplina e `done` para selecionar "
+        "concluídas (`true`) ou pendentes (`false`). Os filtros podem ser combinados. "
+        "Sem filtros, retorna todas as atividades. Quando não há resultados, "
+        "retorna uma lista vazia (`[]`). Requer autenticação Bearer."
+    ),
+    response_description="Lista de atividades que correspondem aos filtros informados.",
 )
 def list_activities(
     session: Annotated[Session, Depends(get_session)],
@@ -61,7 +105,7 @@ def list_activities(
         Subject | None, Query(description="Filtrar pelo nome completo da disciplina.")
     ] = None,
     done: Annotated[
-        bool | None, Query(description="Filtrar atividades concluidas ou pendentes.")
+        bool | None, Query(description="Filtrar atividades concluídas ou pendentes.")
     ] = None,
 ) -> list[Activity]:
     """Consulta as atividades com filtros opcionais.
@@ -83,10 +127,17 @@ def list_activities(
     "/{activity_id}",
     response_model=ActivityOutput,
     summary="Consultar uma atividade",
-    responses={404: {"description": "Atividade nao encontrada."}},
+    description=(
+        "Consulta uma atividade pelo seu identificador inteiro e positivo. "
+        "Retorna 404 quando a atividade não existe. Requer autenticação Bearer."
+    ),
+    response_description="Dados da atividade correspondente ao identificador.",
+    responses={404: _NOT_FOUND_RESPONSE},
 )
 def get_activity(
-    activity_id: Annotated[int, Path(gt=0, description="ID da atividade.")],
+    activity_id: Annotated[
+        int, Path(gt=0, description="Identificador inteiro e positivo da atividade.")
+    ],
     session: Annotated[Session, Depends(get_session)],
 ) -> Activity:
     """Consulta uma atividade pelo identificador.
@@ -111,10 +162,20 @@ def get_activity(
     "/{activity_id}",
     response_model=ActivityOutput,
     summary="Substituir os dados de uma atividade",
-    responses={404: {"description": "Atividade nao encontrada."}},
+    description=(
+        "Substitui os dados de uma atividade existente, mantendo seu identificador. "
+        "Envie os campos de formulário `title` e `subject`, que são obrigatórios.\n\n"
+        "**Atenção:** o PUT substitui todos os dados. Ao omitir `description`, "
+        "ela passa a ser `null`; ao omitir `done`, ele passa a ser `false`. "
+        "Retorna 404 quando a atividade não existe. Requer autenticação Bearer."
+    ),
+    response_description="Atividade atualizada, com o mesmo identificador.",
+    responses={404: _NOT_FOUND_RESPONSE},
 )
 def update_activity(
-    activity_id: Annotated[int, Path(gt=0, description="ID da atividade.")],
+    activity_id: Annotated[
+        int, Path(gt=0, description="Identificador inteiro e positivo da atividade.")
+    ],
     data: Annotated[ActivityInput, Form()],
     session: Annotated[Session, Depends(get_session)],
 ) -> Activity:
@@ -143,10 +204,18 @@ def update_activity(
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
     summary="Excluir uma atividade",
-    responses={404: {"description": "Atividade nao encontrada."}},
+    description=(
+        "Exclui a atividade correspondente ao identificador informado. "
+        "Quando a exclusão é concluída, retorna 204 sem corpo de resposta. "
+        "Retorna 404 quando a atividade não existe. Requer autenticação Bearer."
+    ),
+    response_description="Atividade excluída; a resposta não possui corpo.",
+    responses={404: _NOT_FOUND_RESPONSE},
 )
 def delete_activity(
-    activity_id: Annotated[int, Path(gt=0, description="ID da atividade.")],
+    activity_id: Annotated[
+        int, Path(gt=0, description="Identificador inteiro e positivo da atividade.")
+    ],
     session: Annotated[Session, Depends(get_session)],
 ) -> Response:
     """Exclui uma atividade pelo identificador.
