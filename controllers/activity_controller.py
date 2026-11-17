@@ -22,7 +22,7 @@ from models.activity import Activity, ActivityInput, ActivityOutput, Subject
 
 router = APIRouter(
     prefix="/activities",
-    tags=["Activities"],
+    tags=["Atividades"],
     dependencies=[Depends(require_authenticated_user)],
     responses={401: {"description": "Autenticação Bearer obrigatória."}},
 )
